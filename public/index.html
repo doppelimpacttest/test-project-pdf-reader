@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Q&amp;A</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117; color: #c9d1d9; height: 100vh;
+      display: flex; flex-direction: column;
+    }
+    header {
+      background: #161b22; padding: 16px 24px;
+      display: flex; align-items: center; gap: 12px;
+      border-bottom: 1px solid #30363d;
+    }
+    header h1 { font-size: 1.25rem; color: #58a6ff; }
+    header .status { margin-left: auto; font-size: 0.8rem; color: #8b949e; }
+    .green-dot { display: inline-block; width: 8px; height: 8px; background: #3fb950; border-radius: 50%; margin-right: 6px; }
+    .red-dot { background: #f85149; }
+
+    .upload-area {
+      margin: 24px auto; width: 100%; max-width: 600px;
+      border: 2px dashed #30363d; border-radius: 12px;
+      padding: 48px; text-align: center; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .upload-area:hover, .upload-area.drag-over { border-color: #58a6ff; background: #161b22; }
+    .upload-area h2 { font-size: 1.1rem; margin-bottom: 8px; color: #c9d1d9; }
+    .upload-area p { color: #8b949e; font-size: 0.9rem; }
+    .upload-area input { display: none; }
+    .upload-area .pdf-icon { font-size: 2.5rem; margin-bottom: 12px; }
+
+    .main { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+    .messages {
+      flex: 1; overflow-y: auto; padding: 24px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .msg { max-width: 760px; width: 100%; padding: 14px 18px; border-radius: 12px; line-height: 1.6; }
+    .msg.user { background: #1f6feb; color: #fff; align-self: flex-end; }
+    .msg.assistant { background: #21262d; border: 1px solid #30363d; align-self: flex-start; white-space: pre-wrap; }
+    .msg.error { background: #3f1518; border: 1px solid #f85149; color: #f85149; }
+    .msg.loading { color: #8b949e; font-style: italic; }
+
+    .intent-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 9px; border-radius: 10px; font-size: 0.68rem;
+      font-weight: 600; letter-spacing: 0.3px; vertical-align: middle;
+    }
+    .intent-salary_information { background: #1a3a2a; color: #3fb950; border: 1px solid #238636; }
+    .intent-deductions { background: #3a2f1a; color: #d29922; border: 1px solid #9e6a03; }
+    .intent-net_pay { background: #1a2f3a; color: #58a6ff; border: 1px solid #1f6feb; }
+    .intent-employment_info { background: #2d1a3a; color: #bc8cff; border: 1px solid #8957e5; }
+    .intent-personal_details { background: #3a1a2f; color: #db61a2; border: 1px solid #bf4b8a; }
+    .intent-document_info { background: #1a1a2e; color: #79c0ff; border: 1px solid #388bfd; }
+    .intent-other { background: #1c1c1c; color: #8b949e; border: 1px solid #30363d; }
+    .intent-same { background: #1a3a2a; color: #3fb950; border: 1px solid #238636; }
+    .intent-different { background: #3a1a1a; color: #f85149; border: 1px solid #da3633; }
+
+    .followup-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px; margin: 0 0 4px 0; align-self: flex-start; max-width: 760px;
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      font-size: 0.75rem; color: #8b949e;
+    }
+    .followup-bar .arrow { color: #58a6ff; font-weight: 700; }
+    .followup-bar.changed { border-color: #9e6a03; }
+    .followup-bar.same { border-color: #238636; }
+
+    .compare-container {
+      align-self: flex-start; width: 100%; max-width: 760px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .compare-header {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.8rem; color: #8b949e; padding: 0 4px;
+    }
+    .compare-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: 12px; font-size: 0.75rem;
+      font-weight: 600; letter-spacing: 0.3px;
+    }
+    .badge-none { background: #1a3a2a; color: #3fb950; border: 1px solid #238636; }
+    .badge-scope { background: #3a2f1a; color: #d29922; border: 1px solid #9e6a03; }
+    .badge-interpretation { background: #1a2f3a; color: #58a6ff; border: 1px solid #1f6feb; }
+    .badge-factual { background: #3a1a1a; color: #f85149; border: 1px solid #da3633; }
+    .badge-hallucination { background: #3a1a2f; color: #db61a2; border: 1px solid #bf4b8a; }
+    .compare-panels { display: flex; gap: 12px; }
+    .compare-panel {
+      flex: 1; background: #21262d; border: 1px solid #30363d;
+      border-radius: 12px; padding: 14px 16px;
+    }
+    .compare-panel.better { border-color: #238636; }
+    .compare-panel .panel-label {
+      font-size: 0.75rem; color: #8b949e; margin-bottom: 8px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .compare-panel .panel-label .model-name { color: #58a6ff; font-weight: 600; }
+    .compare-panel .panel-label .better-tag {
+      background: #238636; color: #fff; padding: 1px 8px;
+      border-radius: 10px; font-size: 0.65rem; font-weight: 700;
+    }
+    .compare-panel .panel-answer { white-space: pre-wrap; line-height: 1.6; font-size: 0.9rem; }
+    .compare-reason {
+      font-size: 0.78rem; color: #8b949e; padding: 6px 12px;
+      background: #161b22; border-radius: 8px; border: 1px solid #30363d;
+    }
+    .compare-reason strong { color: #c9d1d9; }
+
+    .input-area {
+      border-top: 1px solid #30363d; background: #161b22;
+      padding: 16px 24px; display: flex; gap: 12px; align-items: flex-end;
+    }
+    .input-area textarea {
+      flex: 1; background: #0d1117; border: 1px solid #30363d;
+      border-radius: 8px; padding: 12px; color: #c9d1d9;
+      font-size: 0.95rem; resize: none; min-height: 48px; max-height: 120px;
+      font-family: inherit;
+    }
+    .input-area textarea:focus { outline: none; border-color: #58a6ff; }
+    .input-area textarea:disabled { opacity: 0.5; cursor: not-allowed; }
+    .input-area button {
+      background: #238636; color: #fff; border: none; border-radius: 8px;
+      padding: 0 24px; font-size: 0.95rem; cursor: pointer; height: 48px;
+      transition: background 0.2s;
+    }
+    .input-area button:hover { background: #2ea043; }
+    .input-area button:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+
+    .model-select {
+      background: #0d1117; border: 1px solid #30363d;
+      border-radius: 8px; padding: 10px 12px; color: #c9d1d9;
+      font-size: 0.85rem; height: 48px; min-width: 160px;
+      cursor: pointer; font-family: inherit;
+    }
+    .model-select:focus { outline: none; border-color: #58a6ff; }
+    .model-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .settings-row {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 8px 24px; background: #161b22; border-top: 1px solid #21262d;
+    }
+    .settings-row label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.82rem; color: #8b949e; cursor: pointer;
+    }
+    .settings-row input[type="checkbox"] {
+      accent-color: #238636; width: 14px; height: 14px; cursor: pointer;
+    }
+    .settings-row .vs-label {
+      font-size: 0.75rem; color: #484f58; font-weight: 700; padding: 0 4px;
+    }
+
+    .detection-method-select {
+      background: #0d1117; border: 1px solid #30363d;
+      border-radius: 6px; padding: 4px 8px; color: #8b949e;
+      font-size: 0.75rem; height: 28px; cursor: pointer; font-family: inherit;
+    }
+    .detection-method-select:focus { outline: none; border-color: #58a6ff; }
+
+    .polite-panel {
+      align-self: flex-start; max-width: 760px; width: 100%;
+      background: #21262d; border: 1px solid #30363d; border-radius: 12px;
+      padding: 14px 16px; margin-top: 8px;
+    }
+    .polite-header {
+      display: flex; align-items: center; gap: 8px; font-size: 0.85rem;
+      color: #8b949e; margin-bottom: 10px;
+    }
+    .polite-score {
+      font-size: 1.2rem; font-weight: 700; color: #3fb950;
+      min-width: 50px; text-align: center;
+    }
+    .polite-dimension {
+      display: flex; justify-content: space-between; font-size: 0.75rem;
+      padding: 4px 0; border-bottom: 1px solid #30363d;
+    }
+    .polite-dimension:last-child { border-bottom: none; }
+    .polite-label { color: #c9d1d9; }
+    .polite-bar { background: #0d1117; border-radius: 4px; height: 8px; width: 100px; }
+    .polite-bar-fill { background: linear-gradient(90deg, #3fb950, #56d364); height: 100%; border-radius: 4px; }
+    .regression-bar {
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid #30363d;
+      font-size: 0.75rem;
+    }
+    .regression-bar .severity-none { color: #3fb950; }
+    .regression-bar .severity-minor { color: #d29922; }
+    .regression-bar .severity-medium { color: #f85149; }
+    .regression-bar .severity-severe { color: #da3633; font-weight: 700; }
+    .winner-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 6px;
+      font-size: 0.7rem; font-weight: 700; margin-left: 8px;
+    }
+    .winner-A { background: #1a2a3a; color: #58a6ff; }
+    .winner-B { background: #1a3a2a; color: #3fb950; }
+    .winner-tie { background: #1c1c1c; color: #8b949e; }
+
+    .hidden { display: none !important; }
+    .pdf-info {
+      max-width: 600px; margin: 0 auto 16px; padding: 8px 16px;
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      font-size: 0.85rem; color: #8b949e;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .pdf-info button {
+      background: transparent; border: 1px solid #30363d;
+      color: #c9d1d9; padding: 4px 12px; border-radius: 6px;
+      cursor: pointer; font-size: 0.8rem;
+    }
+    .pdf-info button:hover { border-color: #f85149; color: #f85149; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PDF Q&amp;A</h1>
+    <div class="status" id="health-status"><span class="red-dot" id="status-dot"></span><span id="status-text">Checking...</span></div>
+  </header>
+
+  <div class="main" id="main-content">
+    <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
+      <div class="pdf-icon">&#128462;</div>
+      <h2>Drop your PDF here or click to upload</h2>
+      <p>Max 10 MB &middot; Up to 100 pages</p>
+      <input type="file" id="file-input" accept="application/pdf" />
+    </div>
+
+    <div class="pdf-info hidden" id="pdf-info">
+      <span id="pdf-details"></span>
+      <button onclick="clearPdf()">Remove</button>
+    </div>
+
+    <div class="messages hidden" id="messages"></div>
+
+    <div class="settings-row hidden" id="settings-row">
+      <label>
+        <input type="checkbox" id="compare-toggle" onchange="onCompareToggle()" />
+        Compare Mode
+      </label>
+      <div class="compare-model-row hidden" id="compare-model-row">
+        <select id="model-select-a" class="model-select">
+          <option value="gpt-4o-mini">GPT-4o Mini</option>
+          <option value="gpt-4o" selected>GPT-4o</option>
+          <option value="gpt-4-turbo">GPT-4 Turbo</option>
+          <option value="gpt-4">GPT-4</option>
+          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+          <option value="o1-mini">o1 Mini</option>
+          <option value="o1-preview">o1 Preview</option>
+          <option value="o3-mini">o3 Mini</option>
+        </select>
+        <span class="vs-label">VS</span>
+        <select id="model-select-b" class="model-select">
+          <option value="gpt-4o-mini" selected>GPT-4o Mini</option>
+          <option value="gpt-4o">GPT-4o</option>
+          <option value="gpt-4-turbo">GPT-4 Turbo</option>
+          <option value="gpt-4">GPT-4</option>
+          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+          <option value="o1-mini">o1 Mini</option>
+          <option value="o1-preview">o1 Preview</option>
+          <option value="o3-mini">o3 Mini</option>
+        </select>
+      </div>
+      <span style="margin-left: auto; font-size: 0.7rem; color: #484f58;">|</span>
+      <label style="font-size: 0.75rem; color: #8b949e;">Detection:</label>
+      <select id="detection-method" class="detection-method-select" title="Intent detection method">
+        <option value="embedding">Embedding (fast)</option>
+        <option value="hybrid" selected>Hybrid (smart)</option>
+        <option value="llm-judge">LLM Judge (detailed)</option>
+      </select>
+    </div>
+
+    <div class="input-area hidden" id="input-area">
+      <textarea id="question-input" placeholder="Ask a question about the PDF..." rows="1"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askQuestion();}"></textarea>
+      <button id="send-btn" onclick="askQuestion()">Send</button>
+      <button id="polite-btn" onclick="askPoliteQuestion()" title="Compare politeness scores" style="background:#3a3a3a;border-color:#555;color:#8b949e;height:48px;width:48px;border-radius:8px;font-size:0.8rem;">Tone</button>
+    </div>
+  </div>
+
+  <script>
+    let sessionId = null;
+    const $ = (id) => document.getElementById(id);
+
+    async function checkHealth() {
+      try {
+        const r = await fetch("/api/health");
+        const ok = r.ok;
+        $("status-dot").className = ok ? "green-dot" : "red-dot";
+        $("status-text").textContent = ok ? "Connected" : "Error";
+      } catch {
+        $("status-dot").className = "red-dot";
+        $("status-text").textContent = "Offline";
+      }
+    }
+    checkHealth();
+    setInterval(checkHealth, 30000);
+
+    const uploadArea = $("upload-area");
+    uploadArea.addEventListener("dragover", (e) => { e.preventDefault(); uploadArea.classList.add("drag-over"); });
+    uploadArea.addEventListener("dragleave", () => uploadArea.classList.remove("drag-over"));
+    uploadArea.addEventListener("drop", (e) => {
+      e.preventDefault(); uploadArea.classList.remove("drag-over");
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    $("file-input").addEventListener("change", (e) => {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+
+    async function handleFile(file) {
+      if (file.type !== "application/pdf") return alert("Only PDF files are accepted.");
+      const form = new FormData();
+      form.append("file", file);
+      uploadArea.innerHTML = "<h2>Uploading &amp; parsing...</h2><p>This may take a moment.</p>";
+      try {
+        const r = await fetch("/api/upload", { method: "POST", body: form });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error + (data.details ? ": " + data.details : ""));
+        sessionId = data.sessionId;
+        $("pdf-details").textContent = file.name + " \u2022 " + data.pageCount + " pages \u2022 " + data.charCount.toLocaleString() + " chars";
+        $("upload-area").classList.add("hidden");
+        $("pdf-info").classList.remove("hidden");
+        $("messages").classList.remove("hidden");
+        $("input-area").classList.remove("hidden");
+        $("settings-row").classList.remove("hidden");
+        $("question-input").focus();
+      } catch (err) {
+        alert("Upload failed: " + err.message);
+        resetUpload();
+      }
+    }
+
+    function resetUpload() {
+      uploadArea.innerHTML = '<div class="pdf-icon">&#128462;</div><h2>Drop your PDF here or click to upload</h2><p>Max 10 MB \u2022 Up to 100 pages</p><input type="file" id="file-input" accept="application/pdf" />';
+      uploadArea.classList.remove("hidden");
+      const newInput = uploadArea.querySelector("#file-input");
+      newInput.addEventListener("change", (e) => { if (e.target.files.length) handleFile(e.target.files[0]); });
+    }
+
+    async function clearPdf() {
+      if (sessionId) { try { await fetch("/api/session/" + sessionId, { method: "DELETE" }); } catch {} }
+      sessionId = null;
+      $("messages").innerHTML = "";
+      $("messages").classList.add("hidden");
+      $("pdf-info").classList.add("hidden");
+      $("input-area").classList.add("hidden");
+      $("settings-row").classList.add("hidden");
+      $("compare-model-row").classList.add("hidden");
+      $("compare-toggle").checked = false;
+      resetUpload();
+    }
+
+    function onCompareToggle() {
+      $("compare-model-row").classList.toggle("hidden", !$("compare-toggle").checked);
+    }
+
+    async function askQuestion() {
+      const input = $("question-input");
+      const question = input.value.trim();
+      if (!question || !sessionId) return;
+
+      const compareMode = $("compare-toggle").checked;
+      const modelA = $("model-select-a").value;
+      const modelB = $("model-select-b").value;
+      const detectionMethod = $("detection-method").value;
+
+      input.value = "";
+      appendMsg("user", question);
+
+      const loadingText = compareMode
+        ? "Comparing " + modelA + " vs " + modelB + "..."
+        : "Thinking...";
+      const loadingEl = appendMsg("loading", loadingText);
+
+      $("send-btn").disabled = true;
+      input.disabled = true;
+      $("model-select-a").disabled = true;
+      $("model-select-b").disabled = true;
+      $("compare-toggle").disabled = true;
+      $("detection-method").disabled = true;
+
+      try {
+        const body = { sessionId, question, detectionMethod };
+        if (compareMode) {
+          body.model = modelA;
+          body.compareModel = modelB;
+          body.compareMode = true;
+        } else {
+          body.model = modelA;
+        }
+
+        const r = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        loadingEl.remove();
+
+        if (!r.ok) {
+          appendMsg("error", data.error + (data.details ? "\n" + data.details : ""));
+        } else {
+          if (data.followUpIntent) {
+            appendFollowUpBar(data.followUpIntent);
+          }
+          if (data.comparison && data.comparison.enabled) {
+            appendCompareResult(data.comparison);
+          } else {
+            appendMsg("assistant", data.answer, data.followUpIntent);
+          }
+        }
+      } catch (err) {
+        loadingEl.remove();
+        appendMsg("error", "Request failed: " + err.message);
+      }
+
+      $("send-btn").disabled = false;
+      input.disabled = false;
+      $("model-select-a").disabled = false;
+      $("model-select-b").disabled = false;
+      $("compare-toggle").disabled = false;
+      $("detection-method").disabled = false;
+      input.focus();
+    }
+
+    function appendMsg(role, text, followUpIntent) {
+      const el = document.createElement("div");
+      el.className = "msg " + role;
+
+      if (role === "assistant" && followUpIntent) {
+        const intentClass = "intent-" + followUpIntent.currentIntent;
+        const badge = '<span class="intent-badge ' + intentClass + '">' + followUpIntent.currentIntent.replace(/_/g, " ") + "</span>";
+        el.innerHTML = escapeHtml(text) + " " + badge;
+      } else {
+        el.textContent = text;
+      }
+
+      $("messages").appendChild(el);
+      $("messages").scrollTop = $("messages").scrollHeight;
+      return el;
+    }
+
+    function appendFollowUpBar(fu) {
+      const bar = document.createElement("div");
+      bar.className = "followup-bar" + (fu.intentChanged ? " changed" : " same");
+
+      const prevIntent = fu.previousIntent.replace(/_/g, " ");
+      const currIntent = fu.currentIntent.replace(/_/g, " ");
+      const icon = fu.intentChanged ? "&#8594;" : "&#8652;";
+      const label = fu.intentChanged ? "Intent changed" : "Same intent";
+
+      bar.innerHTML =
+        '<span style="color:' + (fu.intentChanged ? "#d29922" : "#3fb950") + '">' + label + "</span>" +
+        '<span style="margin:0 4px;">|</span>' +
+        '<span class="intent-badge intent-' + fu.previousIntent + '">' + prevIntent + "</span>" +
+        '<span class="arrow">' + icon + "</span>" +
+        '<span class="intent-badge intent-' + fu.currentIntent + '">' + currIntent + "</span>" +
+        '<span style="margin-left:auto;font-size:0.65rem;color:#484f58;">sim: ' + fu.similarity + "</span>";
+
+      $("messages").appendChild(bar);
+      $("messages").scrollTop = $("messages").scrollHeight;
+    }
+
+    function appendCompareResult(comp) {
+      const container = document.createElement("div");
+      container.className = "compare-container";
+
+      const badgeClass = "badge-" + comp.divergenceType;
+      const badgeLabel = comp.divergenceType.toUpperCase();
+      const changedText = comp.intentChanged ? "Intent Changed" : "Same Intent";
+
+      const header = document.createElement("div");
+      header.className = "compare-header";
+      let headerHtml =
+        '<span class="compare-badge ' + badgeClass + '">' + badgeLabel + " &mdash; " + changedText + "</span>";
+      if (comp.similarity !== undefined) {
+        headerHtml += '<span>Similarity: ' + (comp.similarity * 100).toFixed(1) + "%</span>";
+      }
+      headerHtml += '<span>Confidence: ' + (comp.confidence * 100).toFixed(1) + "%</span>";
+      headerHtml += '<span style="font-size:0.7rem;color:#484f58;">[' + comp.detectionMethod + "]</span>";
+      if (comp.hybridPhase) {
+        headerHtml += '<span style="font-size:0.7rem;color:#8b949e;margin-left:4px;">(' + comp.hybridPhase + ")</span>";
+      }
+      header.innerHTML = headerHtml;
+      container.appendChild(header);
+
+      if (comp.intent1) {
+        const intentRow = document.createElement("div");
+        intentRow.style.cssText = "display:flex;gap:8px;padding:0 4px;font-size:0.72rem;";
+        intentIntent1 = comp.intentChanged ? "intent-different" : "intent-same";
+        const intentClass1 = comp.intentChanged ? "intent-different" : "intent-same";
+        const intentClass2 = comp.intentChanged ? "intent-different" : "intent-same";
+        intentRow.innerHTML =
+          '<span class="intent-badge ' + intentClass1 + '">A: ' + comp.intent1.replace(/_/g, " ") + "</span>" +
+          '<span class="intent-badge ' + intentClass2 + '">B: ' + comp.intent2.replace(/_/g, " ") + "</span>";
+        container.appendChild(intentRow);
+      }
+
+      const panels = document.createElement("div");
+      panels.className = "compare-panels";
+
+      const panelA = document.createElement("div");
+      panelA.className = "compare-panel" + (comp.whichBetter === "A" ? " better" : "");
+      panelA.innerHTML =
+        '<div class="panel-label">' +
+          '<span class="model-name">' + comp.modelA + "</span>" +
+          (comp.whichBetter === "A" ? '<span class="better-tag">BETTER</span>' : "") +
+        "</div>" +
+        '<div class="panel-answer">' + escapeHtml(comp.answerA) + "</div>";
+      panels.appendChild(panelA);
+
+      const panelB = document.createElement("div");
+      panelB.className = "compare-panel" + (comp.whichBetter === "B" ? " better" : "");
+      panelB.innerHTML =
+        '<div class="panel-label">' +
+          '<span class="model-name">' + comp.modelB + "</span>" +
+          (comp.whichBetter === "B" ? '<span class="better-tag">BETTER</span>' : "") +
+        "</div>" +
+        '<div class="panel-answer">' + escapeHtml(comp.answerB) + "</div>";
+      panels.appendChild(panelB);
+
+      container.appendChild(panels);
+
+      const reason = document.createElement("div");
+      reason.className = "compare-reason";
+      let reasonHtml = "<strong>Reason:</strong> " + escapeHtml(comp.reason);
+      if (comp.judgeReason && comp.judgeConfidence !== undefined) {
+        reasonHtml += '<br><span style="color:#8b949e;font-size:0.72rem;">Judge confidence: ' + (comp.judgeConfidence * 100).toFixed(1) + "%</span>";
+      }
+      reason.innerHTML = reasonHtml;
+      container.appendChild(reason);
+
+      $("messages").appendChild(container);
+      $("messages").scrollTop = $("messages").scrollHeight;
+    }
+
+    function appendPoliteResult(result) {
+      const container = document.createElement("div");
+      container.className = "polite-panel";
+
+      const scoreA = result.politenessA?.normalizedScore ?? 0;
+      const scoreB = result.politenessB?.normalizedScore ?? 0;
+      const comp = result.comparison ?? {};
+      const delta = comp.politenessDelta ?? 0;
+      const severity = comp.severity ?? "none";
+      const winnerClass = comp.winner === "A" ? "winner-A" : comp.winner === "B" ? "winner-B" : "winner-tie";
+      const winnerText = comp.winner === "A" ? "A more polite" : comp.winner === "B" ? "B more polite" : "Tie";
+      const intentMatch = comp.intentMatch ?? true;
+
+      function renderDimensions(score, max) {
+        const dims = ["Respectfulness", "Warmness", "Professionalism", "Context", "Directness"];
+        const keys = ["respectfulness", "warmness", "professionalism", "contextSensitivity", "directnessPenalty"];
+        let html = "";
+        for (let i = 0; i < dims.length; i++) {
+          const dimScore = score[keys[i]]?.score ?? 0;
+          const dimMax = score[keys[i]]?.max ?? 100;
+          const pct = Math.round((dimScore / dimMax) * 100);
+          html += '<div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#8b949e;margin:2px 0;">' +
+            '<span>' + dims[i] + '</span>' +
+            '<span>' + pct + '%</span>' +
+            '</div>' +
+            '<div style="background:#0d1117;border-radius:4px;height:6px;margin-bottom:6px;">' +
+            '<div style="background:linear-gradient(90deg,#3fb950,#56d364);height:100%;width:' + pct + '%;border-radius:4px;"></div>' +
+            '</div>';
+        }
+        return html;
+      }
+
+      container.innerHTML =
+        '<div class="polite-header">' +
+          '<span class="polite-score">' + scoreA + '</span>' +
+          '<span style="margin:0 8px;">vs</span>' +
+          '<span class="polite-score">' + scoreB + '</span>' +
+          '<span class="winner-badge ' + winnerClass + '">' + winnerText + '</span>' +
+        '</div>' +
+        '<div style="margin:8px 0;font-size:0.75rem;">' +
+          '<div style="display:flex;gap:20px;">' +
+            '<div style="flex:1;">' +
+              '<div style="color:#8b949e;margin-bottom:2px;">Model A Dimensions:</div>' +
+              renderDimensions(result.politenessA, scoreA) +
+            '</div>' +
+            '<div style="flex:1;">' +
+              '<div style="color:#8b949e;margin-bottom:2px;">Model B Dimensions:</div>' +
+              renderDimensions(result.politenessB, scoreB) +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="regression-bar" style="color:' + (delta > 0 ? '#3fb950' : delta < 0 ? '#f85149' : '#8b949e') + ';">' +
+          'Δ: ' + (delta > 0 ? '+' : '') + (delta !== undefined ? delta.toFixed(1) : delta) + ' (' + severity + ' regression)' +
+        '</div>' +
+        '<div style="margin-top:8px;font-size:0.75rem;color:#8b949e;">' +
+          '<span class="intent-badge intent-' + (intentMatch ? 'same' : 'different') + '">' +
+          (intentMatch ? 'Same Intent' : 'Intent Changed') +
+          '</span>' +
+        '</div>' +
+        '<div style="margin-top:10px;font-size:0.8rem;">' +
+          '<div style="color:#8b949e;margin-bottom:4px;">Model A (' + result.politenessA?.grade + '):</div>' +
+          '<div style="background:#161b22;padding:8px;border-radius:6px;margin-bottom:8px;">' + escapeHtml(result.answerA) + '</div>' +
+          '<div style="color:#8b949e;margin-bottom:4px;">Model B (' + result.politenessB?.grade + '):</div>' +
+          '<div style="background:#161b22;padding:8px;border-radius:6px;">' + escapeHtml(result.answerB) + '</div>' +
+        '</div>';
+
+      $("messages").appendChild(container);
+      $("messages").scrollTop = $("messages").scrollHeight;
+    }
+
+    async function askPoliteQuestion() {
+      const input = $("question-input");
+      const question = input.value.trim();
+      if (!question || !sessionId) return;
+
+      const modelA = $("model-select-a").value;
+      const modelB = $("model-select-b").value;
+
+      input.value = "";
+      appendMsg("user", question);
+
+      const loadingEl = appendMsg("loading", "Comparing politeness...");
+
+      $("send-btn").disabled = true;
+      input.disabled = true;
+
+      try {
+        const r = await fetch("/api/ask/polite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, question, model: modelA, compareModel: modelB }),
+        });
+        const data = await r.json();
+        loadingEl.remove();
+
+        if (!r.ok) {
+          appendMsg("error", data.error + (data.details ? "\n" + data.details : ""));
+        } else {
+          appendPoliteResult(data);
+        }
+      } catch (err) {
+        loadingEl.remove();
+        appendMsg("error", "Request failed: " + err.message);
+      }
+
+      $("send-btn").disabled = false;
+      input.disabled = false;
+      input.focus();
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

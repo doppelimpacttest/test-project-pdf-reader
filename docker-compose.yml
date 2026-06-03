@@ -1,0 +1,27 @@
+services:
+  pdf-qa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - PORT=8080
+      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-10}
+      - MAX_PDF_PAGES=${MAX_PDF_PAGES:-100}
+      - IMPACT_API_KEY=${IMPACT_API_KEY}
+      - IMPACT_SHADOW_MODEL=${IMPACT_SHADOW_MODEL}
+      - IMPACT_SERVER_URL=${IMPACT_SERVER_URL:-http://localhost:4000}
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

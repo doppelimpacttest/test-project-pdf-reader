@@ -1,0 +1,26 @@
+{
+  "name": "pdf-qa-app",
+  "version": "1.0.0",
+  "description": "Upload a PDF and ask questions about it using an LLM",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@doppel-llm-test/sdk": "^1.1.0",
+    "@fastify/multipart": "^8.3.0",
+    "@fastify/static": "^7.0.4",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.1",
+    "impact-testing-sdk": "^0.1.0",
+    "openai": "^4.53.0",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.12",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  }
+}
