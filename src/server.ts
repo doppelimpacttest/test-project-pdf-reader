@@ -26,7 +26,7 @@ await server.register(fastifyStatic, {
 
 await registerRoutes(server);
 
-const PORT = parseInt(process.env.PORT ?? "3000", 10);
+const PORT = parseInt(process.env.PORT ?? "65534", 10);
 const HOST = "0.0.0.0";
 
 try {
